@@ -4,6 +4,10 @@ var express= require('express');
 var mongoose = require('mongoose');
 var passport = require('passport');
 var flash = require('connect-flash');
+var url = require('url');
+var _ = require('underscore');
+var cors = require('cors');
+
 
 var logger = require('morgan');
 var cookieParser = require('cookie-parser');
@@ -41,12 +45,48 @@ app.use(session({
 app.use(passport.initialize());
 app.use(passport.session());
 app.use(flash());
+router.use(cors());
 
 // routes
 router.use(function (req, res, next) {
     console.log('Handling api request ...');
     // do all kind of common validation here for each request
     // if we build oauth based than we validate access token for each request here
+    // Website you wish to allow to connect
+
+    var domains = ["facebook","localhost","localhost:8080","localhost:9000","http://localhost:8080","http://localhost:9000"];
+    res.header('Access-Control-Allow-Credentials', true);
+    var origin = req.headers['origin'];
+    if (origin) {
+      var hostname = url.parse(origin).hostname;
+      console.log(hostname);
+      var allowed = _.any(domains, function(domain) {
+        return (domain === '*') || (hostname.match("(^|\\.)" + domain.replace(/\./, '\\.') + "$") !== null);
+      })
+      if (allowed) {
+        console.log("Allowed " + allowed);
+        console.log("Origin " + origin);
+        res.header('Access-Control-Allow-Origin', origin);
+      }else{
+        res.header('Access-Control-Allow-Origin', '*');
+      }
+    }
+    res.header('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE')
+    res.header('Access-Control-Allow-Headers', 'X-Requested-With, Accept, Origin, Referer, User-Agent, Content-Type, Authorization')
+
+    //res.setHeader('Access-Control-Allow-Origin', '*');
+
+    // Request methods you wish to allow
+    //res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS, PUT, PATCH, DELETE');
+
+    // Request headers you wish to allow
+    //res.setHeader('Access-Control-Allow-Headers', 'X-Requested-With,content-type');
+
+    // Set to true if you need the website to include cookies in the requests sent
+    // to the API (e.g. in case you use sessions)
+    //res.setHeader('Access-Control-Allow-Credentials', true);
+
+    // Pass to next layer of middleware
     next();
 });
 
@@ -59,11 +99,26 @@ router.get('/login',isLoggedIn, function(req,res){
       res.redirect('/')
   });
 
-router.post('/login', passport.authenticate('local-login', {
-    successRedirect: '/profile',
-    failureRedirect: '/login',
-    failureFlash: true
-  }) );
+router.post('/login',
+ passport.authenticate('local-login'),function(req,res){
+    return res.json(req.user)
+  });
+
+// Authentication
+
+// router.get('/facebook',function(req,res){
+//   //res.redirect('/auth/facebook');
+//   router.get('/auth/facebook', passport.authenticate('facebook', { scope: 'email' }));
+// });
+
+router.get('/auth/facebook', passport.authenticate('facebook', { scope: 'email' }));
+
+router.get('/auth/facebook/callback',
+   passport.authenticate('facebook'), function(req,res){
+     console.log('sending facebook auth data');
+       return res.json(req.user);
+});
+
 
 router.get('/logout', function (req, res) {
     req.logout();
@@ -105,13 +160,6 @@ router.post('/signup', passport.authenticate('local-signup', {
 }));
 
 
-// // Authentication
-router.get('/auth/facebook', passport.authenticate('facebook', { scope: 'email' }));
-
-router.get('/auth/facebook/callback', passport.authenticate('facebook', {
-    successRedirect: '/profile',
-    failureRedirect: '/'
-}));
 
 router.get('/auth/twitter', passport.authenticate('twitter'));
 
